@@ -1,0 +1,18 @@
+name: mllm-edr-env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pytorch=1.10
+  - torchvision=0.15.2
+  - numpy=1.24.4
+  - scikit-learn=1.3.0
+  - pandas=2.0.3
+  - matplotlib=3.8.2
+  - opencv=4.8.0
+  - pip
+  - pip:
+      - opencv-python==4.8.0 
