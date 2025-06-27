@@ -168,7 +168,6 @@ class Image2ReportModel(nn.Module):
 
 
 
-
 if __name__ == "__main__":
     from PIL import Image
     from torchvision.transforms import ToTensor
