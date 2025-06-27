@@ -63,14 +63,14 @@ def evaluate(model, val_loader, device, epoch=None, max_batches=None):
             all_disease_trues.extend(disease_labels.cpu().numpy())
 
     if epoch is not None:
-        os.makedirs(opts.save_dir, exist_ok=True)  # 确保目录存在
+        os.makedirs(opts.save_dir, exist_ok=True) 
         csv_path = os.path.join(opts.save_dir, f"eval_epoch{epoch + 1}.csv")
         with open(csv_path, mode="w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["sample_id", "pred_report", "gt_report"])
             for i, (pred, gt) in enumerate(zip(pred_list, gt_list)):
                 writer.writerow([f"val_{i}", pred, gt])
-        print(f"✅ Saved prediction results to {csv_path}")
+        print(f"Saved prediction results to {csv_path}")
 
     mucosa_acc = accuracy_score(all_mucosa_trues, all_mucosa_preds)
     mucosa_precision, mucosa_recall, mucosa_f1, _ = precision_recall_fscore_support(all_mucosa_trues, all_mucosa_preds, average="macro", zero_division=0)
@@ -132,7 +132,7 @@ def train(model, dataloader, optimizer, scheduler, device, epoch, num_epochs, ma
         torch.cuda.empty_cache()
 
     avg_loss = total_loss / (step + 1)
-    print(f"✅ Epoch {epoch+1} Training Loss (partial): {avg_loss:.4f}")
+    print(f"Epoch {epoch+1} Training Loss (partial): {avg_loss:.4f}")
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -163,13 +163,13 @@ def main():
     for epoch in range(opts.num_epochs):
         train(model, train_loader, optimizer, scheduler, device, epoch, opts.num_epochs)
         metrics = evaluate(model, val_loader, device, epoch=epoch)
-        print(f"📊 Epoch {epoch+1} Validation Scores: {metrics}")
+        print(f"Epoch {epoch+1} Validation Scores: {metrics}")
 
         if metrics["bleu4"] > best_bleu4:
             best_bleu4 = metrics["bleu4"]
-            os.makedirs(opts.save_dir, exist_ok=True)  # 确保目录存在
+            os.makedirs(opts.save_dir, exist_ok=True)
             torch.save(model.state_dict(), os.path.join(opts.save_dir,"best_model.pt"))
-            print(f"✅ Best model saved at epoch {epoch+1} with BLEU-4: {best_bleu4:.4f}")
+            print(f"Best model saved at epoch {epoch+1} with BLEU-4: {best_bleu4:.4f}")
 
 
 if __name__ == "__main__":
