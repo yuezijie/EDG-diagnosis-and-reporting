@@ -40,7 +40,6 @@ class EGDReportDataset(Dataset):
             if not os.path.isdir(class_path):
                 continue
 
-            # 提取标签
             mucosa_label = None
             for mucosa in self.mucosa_classes:
                 if mucosa in class_dir:
@@ -81,15 +80,9 @@ class EGDReportDataset(Dataset):
                     "report": report,
                     "mucosa": mucosa_label,
                     "disease_tokens": disease_labels,
-                    "case_path": case_dir  # 病例文件夹路径
+                    "case_path": case_dir 
                 })
 
-        # 输出疾病标签统计信息
-        # print("疾病标签频次统计：")
-        # for k in self.disease_classes:
-        #     print(f"{k}: {self.disease_counter.get(k, 0)}")
-
-        # 保存统计结果
         pd.DataFrame({
             "Disease": list(self.disease_classes),
             "Count": [self.disease_counter.get(k, 0) for k in self.disease_classes]
