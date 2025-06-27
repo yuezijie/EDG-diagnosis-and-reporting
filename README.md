@@ -1,2 +1,9 @@
 # EDG-diagnosis-and-reporting
-The code is currently being updated.
+
+## Initialization
+
+Create an environment with conda:
+```
+conda env create -f conda.yaml
+conda activate endodac
+```
