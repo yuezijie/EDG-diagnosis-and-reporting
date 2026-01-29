@@ -31,11 +31,11 @@ class MLLMEDROptions:
         self.parser.add_argument("--learning_rate",
                                  type=float,
                                  help="learning rate",
-                                 default=2e-5)
+                                 default=5e-5)
         self.parser.add_argument("--num_epochs",
                                  type=int,
                                  help="number of epochs",
-                                 default=10)
+                                 default=100)
 
         self.parser.add_argument("--mucosa_loss_weight",
                                  type=float,
@@ -84,7 +84,7 @@ class MLLMEDROptions:
         self.parser.add_argument("--decoder_path",
                                  type=str,
                                  help="path_of_decoder",
-                                 default="/VisCom-SSD-2/yzj/paper9/MLLM-EDR/pre/opt-1.3b/")
+                                 default="/VisCom-SSD-2/yzj/paper9/MLLM-EDR/pre/opt-2.7b/")
 
         self.parser.add_argument("--prompt",
                                  type=str,

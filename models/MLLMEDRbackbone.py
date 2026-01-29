@@ -5,6 +5,9 @@ from transformers import CLIPModel, CLIPProcessor, AutoModelForCausalLM, AutoTok
 import pandas as pd
 from .modules import CrossAttentionBlock
 
+from peft import LoraConfig, get_peft_model, TaskType
+
+
 class Image2ReportModel(nn.Module):
     def __init__(self,opts):
         super().__init__()
@@ -23,7 +26,28 @@ class Image2ReportModel(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(opts.decoder_path)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.visual_proj = nn.Linear(self.vision_width, self.decoder.config.hidden_size)
+
+        for p in self.decoder.parameters():
+            p.requires_grad = False
+
+        lora_cfg = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=getattr(opts, "lora_r", 8),
+            lora_alpha=getattr(opts, "lora_alpha", 16),
+            lora_dropout=getattr(opts, "lora_dropout", 0.05),
+            bias="none",
+            target_modules=getattr(
+                opts,
+                "lora_target_modules",
+                ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]  # OPT-like defaults
+            ),
+        )
+        self.decoder = get_peft_model(self.decoder, lora_cfg)
+
+        # LoRA 注入完成后，取 decoder 输入 embedding 的真实维度（最可靠）
+        decoder_embed_dim = self.decoder.get_input_embeddings().weight.shape[1]
+        self.visual_proj = nn.Linear(self.vision_width, decoder_embed_dim)
+
         self.self_attn = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=self.vision_width, nhead=8, batch_first=True),
             num_layers=1
@@ -38,10 +62,16 @@ class Image2ReportModel(nn.Module):
         self.mucosa_classifier = nn.Linear(self.vision_width, opts.num_mucosa_classes)
         self.disease_classifier = nn.Linear(self.vision_width, opts.num_disease_classes)
 
+        # === [CHANGE] text encoder frozen, vision encoder trainable ===
         for param in self.clip.text_model.parameters():
             param.requires_grad = False
+        self.clip.text_model.eval()
 
-        self.clip = self.clip.eval()
+        for param in self.clip.vision_model.parameters():
+            param.requires_grad = True
+
+        # # === [CHANGE] remove forcing entire CLIP to eval (let model.train()/eval() control it) ===
+        # self.clip = self.clip.eval()
 
         df = pd.read_excel(opts.knowledge_path)
         self.knowledge_texts = df.iloc[:, 0].tolist()
@@ -62,20 +92,24 @@ class Image2ReportModel(nn.Module):
                 from torchvision.transforms.functional import to_pil_image
                 inputs = self.processor(images=to_pil_image(img.cpu()), return_tensors="pt", do_rescale=False)
                 inputs = {k: v.to(device) for k, v in inputs.items()}
-                with torch.no_grad():
-                    vision_out = self.clip.vision_model(**inputs).last_hidden_state
-                    vision_out = vision_out.squeeze(0)
 
-                    cls_token = vision_out[0:1, :]
-                    patch_tokens = vision_out[1:, :].transpose(0, 1).unsqueeze(0)
-                    pooled_patches = F.adaptive_avg_pool1d(patch_tokens, self.tokens_per_frame).squeeze(0).transpose(0, 1)
-                    tokens = torch.cat([cls_token, pooled_patches], dim=0)
-                    token_seq.append(tokens)
-                    cls_seq.append(cls_token)
+                vision_out = self.clip.vision_model(**inputs).last_hidden_state
+                vision_out = vision_out.squeeze(0)
+
+                cls_token = vision_out[0:1, :]
+                patch_tokens = vision_out[1:, :].transpose(0, 1).unsqueeze(0)
+                pooled_patches = F.adaptive_avg_pool1d(patch_tokens, self.tokens_per_frame).squeeze(0).transpose(0, 1)
+                tokens = torch.cat([cls_token, pooled_patches], dim=0)
+                token_seq.append(tokens)
+                cls_seq.append(cls_token)
 
             token_tensor = torch.cat(token_seq, dim=0)
-            pooled_tokens = F.adaptive_avg_pool1d(token_tensor.transpose(0, 1).unsqueeze(0), self.num_frames * (self.tokens_per_frame + 1)).squeeze(0).transpose(0, 1)
+            pooled_tokens = F.adaptive_avg_pool1d(
+                token_tensor.transpose(0, 1).unsqueeze(0),
+                self.num_frames * (self.tokens_per_frame + 1)
+            ).squeeze(0).transpose(0, 1)
             batch_embeds.append(pooled_tokens)
+
             cls_tensor = torch.cat(cls_seq, dim=0)
             batch_cls_tokens.append(torch.mean(cls_tensor, dim=0))
 
@@ -165,39 +199,3 @@ class Image2ReportModel(nn.Module):
             mucosa_logits = self.mucosa_classifier(cls_tokens)
 
             return generated_text, mucosa_logits, disease_logits
-
-
-
-if __name__ == "__main__":
-    from PIL import Image
-    from torchvision.transforms import ToTensor
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dummy_image = ToTensor()(Image.new("RGB", (224, 224), color=(255, 255, 255)))
-    imgs = [[dummy_image.to(device) for _ in range(8)] for _ in range(2)]
-
-    target_texts = [
-        "Esophagus: mild congestion and erosion observed.",
-        "Gastric mucosa generally healthy, minor polyps present."
-    ]
-
-    model = Image2ReportModel().to(device)
-
-    encoded = model.tokenizer(
-        target_texts,
-        return_tensors="pt",
-        padding="longest",
-        truncation=True,
-        max_length=64
-    ).to(device)
-
-    loss, logits, mucosa_logits, disease_logits = model((imgs, encoded.input_ids))
-
-    print("Report loss:", loss.item())
-    print("Mucosa logits:", mucosa_logits)
-    print("Disease logits:", disease_logits)
-
-    results, mucosa_pred, disease_pred = model.generate(imgs)
-    print("Generated Reports:")
-    for r in results:
-        print(r)

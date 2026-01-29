@@ -18,6 +18,7 @@ def inference(model, test_loader, device, save_path=None):
         for imgs, reports, mucosa_labels, disease_labels, case_paths in tqdm(test_loader, desc="Running Inference"):
             imgs = tuple(seq.to(device) for seq in imgs)
 
+            # 模型生成报告
             preds, _, _ = model.generate(imgs)
 
             all_preds.extend(preds)
@@ -31,21 +32,25 @@ def inference(model, test_loader, device, save_path=None):
             writer.writerow(["sample_path", "generated_report", "ground_truth_report"])
             for path, pred, gt in zip(all_case_paths, all_preds, all_gt):
                 writer.writerow([path, pred, gt])
-        print(f"Inference results saved to {save_path}")
+        print(f"✅ Inference results saved to {save_path}")
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     options = MLLMEDROptions()
     opts = options.parse()
 
+    # 加载测试集
     test_dataset = EGDReportDataset(opts.data_path, opts)
     test_loader = DataLoader(test_dataset, batch_size=opts.batch_size, shuffle=False, collate_fn=custom_collate_fn)
 
+    # 初始化模型并加载最佳权重
     model = Image2ReportModel(opts).to(device)
     best_model_path = os.path.join(opts.save_dir, "best_model.pt")
-    assert os.path.exists(best_model_path), f"Best model not found at {best_model_path}"
+    assert os.path.exists(best_model_path), f"❌ Best model not found at {best_model_path}"
     model.load_state_dict(torch.load(best_model_path, map_location=device))
-    print(f"Loaded best model from {best_model_path}")
+    print(f"✅ Loaded best model from {best_model_path}")
+
+    # 推理并保存
     save_csv = os.path.join(opts.save_dir, "test_predictions.csv")
     inference(model, test_loader, device, save_path=save_csv)
 
